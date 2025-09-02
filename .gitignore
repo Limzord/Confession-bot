@@ -1,0 +1,11 @@
+# the directory with all pictures to be picked by the bot
+pictures/
+
+# specific server's config / log files
+*.json
+
+# python venv
+venv/
+
+# file to store discord bot id
+bot-id.txt
