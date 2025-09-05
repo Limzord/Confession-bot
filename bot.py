@@ -68,6 +68,7 @@ image: discord.Attachment=None):
     embedVar = discord.Embed(
     title="💗 Silly Confession #" + (str)(confession_number), description=message, color=sidebarColor
             )
+    imgURL = None
     if image:
         imgURL = image.url
         embedVar.set_image(url=imgURL)
