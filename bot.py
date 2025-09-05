@@ -106,15 +106,11 @@ number: int):
     if confession == None:
         await ctx.response.send_message(content="This confession does not exist",ephemeral=True)
         return
-    if confession["user_id"] == ctx.user.id or await is_moderator(guild=ctx.guild,user=ctx.user):
-        embedVar = discord.Embed(
-        title="💗 Silly Confession #" + (str)(number), description=confession["message"], color=sidebarColor)
-        user = await bot.fetch_user(confession["user_id"])
-        embedVar.add_field(name="User", value="||" + user.mention + "||", inline=True)
-        await ctx.response.send_message(embed=embedVar,ephemeral=True)
-        return
     embedVar = discord.Embed(
     title="💗 Silly Confession #" + (str)(number), description=confession["message"], color=sidebarColor)
+    if confession["user_id"] == ctx.user.id or await is_moderator(guild=ctx.guild,user=ctx.user):
+        user = await bot.fetch_user(confession["user_id"])
+        embedVar.add_field(name="User", value="||" + user.mention + "||", inline=True)
     await ctx.response.send_message(embed=embedVar,ephemeral=True)
 
 @bot.command(pass_context=True,name='set-confession-channel')
