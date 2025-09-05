@@ -116,6 +116,8 @@ number: int):
     if confession["user_id"] == ctx.user.id or await is_moderator(guild=ctx.guild,user=ctx.user):
         user = await bot.fetch_user(confession["user_id"])
         embedVar.add_field(name="User", value="||" + user.mention + "||", inline=True)
+    if "imgURL" in confession:
+        embedVar.set_image(url=confession["imgURL"])
     await ctx.response.send_message(embed=embedVar,ephemeral=True)
 
 @bot.command(pass_context=True,name='set-confession-channel')
