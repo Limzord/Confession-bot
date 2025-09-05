@@ -89,11 +89,14 @@ async def send_message_to_log(ctx: discord.Interaction, message: str, confession
     channel = await get_log_channel(ctx.guild)
     if not channel == 0:
         await channel.send(embed=embedVar)
-    add_message_to_log(confession_number,user.id,message, ctx.guild.id)
+    add_message_to_log(confession_number,user.id,message, ctx.guild.id, imgURL)
 
-def add_message_to_log(number: int, user_id: int, message: str, guild_id: int):
+def add_message_to_log(number: int, user_id: int, message: str, guild_id: int, imgURL: str):
     server_settings = get_server_settings(guild_id)
-    server_settings["message_log"].append({"number": number, "user_id": user_id, "message": message})
+    if imgURL:
+        server_settings["message_log"].append({"number": number, "user_id": user_id, "message": message, "imgURL": imgURL})
+    else:
+        server_settings["message_log"].append({"number": number, "user_id": user_id, "message": message})
     server_settings["confession_amount"] += 1
     write_server_settings(guild_id,server_settings)
 
