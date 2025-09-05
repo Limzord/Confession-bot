@@ -327,7 +327,7 @@ async def help(ctx: discord.Interaction):
     embedVar.add_field(
         name="Disclaimer:",
         value="All moderators can see who wrote anonymous confessions", inline=True)
-    embedVar.set_author(name="This bot was created by Alissa(@Limzord)",url="https://gravatar.com/limzord",icon_url="https://2.gravatar.com/avatar/61b77b4c14bebabe890bf098f2bfcbdb88cf435a26c4f75dbdb3b7a97e998a1f?size=256&d=initials")
+    embedVar.set_author(name="This bot was created by Alissa(@Limzord)",url="https://limzord.com",icon_url="https://limzord.com/pfp.png")
 
 
     await ctx.response.send_message(embed=embedVar,ephemeral=True)
