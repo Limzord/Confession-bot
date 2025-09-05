@@ -69,21 +69,23 @@ image: discord.Attachment=None):
     title="💗 Silly Confession #" + (str)(confession_number), description=message, color=sidebarColor
             )
     if image:
-        embedVar.set_image(url=image.url)
+        imgURL = image.url
+        embedVar.set_image(url=imgURL)
     # if ctx.reference:
     #     channel = ctx.reference.channel
     #     await channel.send(embed=embedVar, reference=ctx.reference)
     await channel.send(embed=embedVar)
-    await send_message_to_log(ctx,message,confession_number)
-    # await channel.send(message)
     await ctx.response.send_message(content="Your confession has been posted 🤫",ephemeral=True)
+    await send_message_to_log(ctx,message,confession_number,imgURL)
 
-async def send_message_to_log(ctx: discord.Interaction, message: str, confession_number: int):
+async def send_message_to_log(ctx: discord.Interaction, message: str, confession_number: int, imgURL: str):
     user = ctx.user
     embedVar = discord.Embed(
     title="💗 Silly Confession #" + (str)(confession_number), description=message
             )
     embedVar.add_field(name="User", value="||" + user.mention + "||", inline=True)
+    if imgURL:
+        embedVar.set_image(url=imgURL)
     channel = await get_log_channel(ctx.guild)
     if not channel == 0:
         await channel.send(embed=embedVar)
