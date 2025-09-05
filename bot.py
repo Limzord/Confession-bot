@@ -42,7 +42,7 @@ async def on_guild_join():
     for server in bot.guilds:
         bot.tree.copy_global_to(guild=server)
         await bot.tree.sync(guild=server)
-    print("added slash commands to new server")
+    print("added slash commands to new server\n server list:\n" + bot.guilds)
 
 @bot.tree.command(name='akb')
 async def akb(ctx: discord.Interaction):
