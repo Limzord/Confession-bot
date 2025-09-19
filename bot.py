@@ -5,7 +5,8 @@ import os, random
 from random import randrange
 import json
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+from urllib.parse import unquote, urlparse
 
 intents = discord.Intents().all()
 intents.members = True
@@ -14,6 +15,7 @@ bot = commands.Bot(command_prefix = '/', intents = intents)
 
 default_settings = {
     "confession_channel" : 0,
+    "confess_in_general" : True,
     "log_channel" : 0,
     "moderator_role" : 0,
     "confession_amount" : 0,
@@ -51,9 +53,13 @@ async def akb(ctx: discord.Interaction):
 
 @bot.tree.command()
 @app_commands.describe(message='your confession',
+reply_to="the number of the confession you want to reply to\n or the link to the message you want to reply to",
+ping_reply="whether or not to ping when replying",
 image="an image to post with your confession")
 async def confess(ctx: discord.Interaction,
 message: str,
+reply_to: str=None,
+ping_reply: bool=False,
 image: discord.Attachment=None):
     """write an anonymous confession"""
     if is_banned(ctx.guild.id,ctx.user.id):
@@ -75,30 +81,67 @@ image: discord.Attachment=None):
     # if ctx.reference:
     #     channel = ctx.reference.channel
     #     await channel.send(embed=embedVar, reference=ctx.reference)
-    await channel.send(embed=embedVar)
+    reply_message = None
+    reply_messageURL = None
+    if reply_to:
+        if reply_to.isdigit():
+            reply_messageURL = json_get_confessionURL(number=reply_to, guild_id=ctx.guild_id)
+            if reply_messageURL is None:
+                await ctx.response.send_message(content="The confession you want to reply to doesn't exist or is too old😣",ephemeral=True)
+                return
+        else:
+            reply_messageURL = reply_to
+        reply_message = await get_message_from_URL(reply_messageURL)
+        if reply_message is None:
+            await ctx.response.send_message(content="The message URL you provided does not exist😣",ephemeral=True)
+            return
+    if reply_message:
+        if reply_message.guild.id == ctx.guild_id:
+            confession_channel = await get_confession_channel(ctx.guild)
+            if reply_message.channel.id != confession_channel.id and not get_confess_in_general(ctx.guild_id):
+                await ctx.response.send_message(content="You can only reply to messages in the confession channel😣",ephemeral=True)
+                return
+            bot_message = await reply_message.channel.send(embed=embedVar, reference=reply_message, mention_author=ping_reply)
+            await send_message_to_log(ctx,message,confession_number,bot_message.id,channel.id,reply_messageURL,imgURL)
+        else:
+            await ctx.response.send_message(content="The message URL you provided is from a different server😣",ephemeral=True)
+            return
+    else:
+        bot_message = await channel.send(embed=embedVar)
     await ctx.response.send_message(content="Your confession has been posted 🤫",ephemeral=True)
-    await send_message_to_log(ctx,message,confession_number,imgURL)
+    if not reply_message:
+        await send_message_to_log(ctx,message,confession_number,bot_message.id,channel.id,reply_messageURL,imgURL)
 
-async def send_message_to_log(ctx: discord.Interaction, message: str, confession_number: int, imgURL: str):
+async def send_message_to_log(ctx: discord.Interaction, message: str, confession_number: int, message_id: int, channel_id: int, reply_messageURL: str, imgURL: str):
     user = ctx.user
     embedVar = discord.Embed(
     title="💗 Silly Confession #" + (str)(confession_number), description=message
             )
     embedVar.add_field(name="User", value="||" + user.mention + "||", inline=True)
+    messageURL = get_URL_from_ids(guild_id=ctx.guild_id,channel_id=channel_id,message_id=message_id)
+    embedVar.add_field(name="Message Link", value=messageURL, inline=True)
+    if reply_messageURL:
+        embedVar.add_field(name="In reply to", value=reply_messageURL, inline=True)
     if imgURL:
         embedVar.set_image(url=imgURL)
     channel = await get_log_channel(ctx.guild)
     if not channel == 0:
         await channel.send(embed=embedVar)
-    add_message_to_log(confession_number,user.id,message, ctx.guild.id, imgURL)
+    add_message_to_log(confession_number,user.id,message, ctx.guild.id, message_id, channel_id, reply_messageURL, imgURL)
 
-def add_message_to_log(number: int, user_id: int, message: str, guild_id: int, imgURL: str):
+def add_message_to_log(number: int, user_id: int, message: str, guild_id: int, message_id: int, channel_id: int, reply_messageURL: str, imgURL: str):
     server_settings = get_server_settings(guild_id)
-    if imgURL:
-        server_settings["message_log"].append({"number": number, "user_id": user_id, "message": message, "imgURL": imgURL})
-    else:
-        server_settings["message_log"].append({"number": number, "user_id": user_id, "message": message})
     server_settings["confession_amount"] += 1
+    if reply_messageURL:
+        if imgURL:
+            server_settings["message_log"].append({"number": number, "user_id": user_id, "message": message, "message_id": message_id, "channel_id": channel_id, "reply_messageURL": reply_messageURL, "imgURL": imgURL})
+        else:
+            server_settings["message_log"].append({"number": number, "user_id": user_id, "message": message, "message_id": message_id, "channel_id": channel_id, "reply_messageURL": reply_messageURL})
+    else:
+        if imgURL:
+            server_settings["message_log"].append({"number": number, "user_id": user_id, "message": message, "message_id": message_id, "channel_id": channel_id, "imgURL": imgURL})
+        else:
+            server_settings["message_log"].append({"number": number, "user_id": user_id, "message": message, "message_id": message_id, "channel_id": channel_id})
     write_server_settings(guild_id,server_settings)
 
 @bot.tree.command(name='get-confession')
@@ -107,8 +150,7 @@ async def get_confession(ctx: discord.Interaction,
 number: int):
     """see the content of a confession from its number"""
     sidebarColor= discord.Color.from_rgb(randrange(255), randrange(255), randrange(255))
-    confessions = get_server_settings(ctx.guild.id)["message_log"]
-    confession = next((item for item in confessions if item['number'] == number), None)
+    confession = get_confession_from_number(number,ctx.guild_id)
     if confession == None:
         await ctx.response.send_message(content="This confession does not exist",ephemeral=True)
         return
@@ -117,6 +159,11 @@ number: int):
     if confession["user_id"] == ctx.user.id or await is_moderator(guild=ctx.guild,user=ctx.user):
         user = await bot.fetch_user(confession["user_id"])
         embedVar.add_field(name="User", value="||" + user.mention + "||", inline=True)
+    if "message_id" in confession:
+        messageURL = json_get_confessionURL(confession=confession,guild_id=ctx.guild_id)
+        embedVar.add_field(name="Message Link", value=messageURL, inline=True)
+    if "reply_messageURL" in confession:
+        embedVar.add_field(name="In reply to", value=confession["reply_messageURL"], inline=True)
     if "imgURL" in confession:
         embedVar.set_image(url=confession["imgURL"])
     await ctx.response.send_message(embed=embedVar,ephemeral=True)
@@ -284,6 +331,88 @@ def json_unban_user(guild_id : int, user_id : int):
     server_settings["banned_user_ids"].remove(user_id)
     write_server_settings(guild_id,server_settings)
 
+def json_get_confessionURL(guild_id: int, confession: dict=None, number: int=None, channel_id: int=None, message_id: int=None):
+    try:
+        if not confession:
+            confession = get_confession_from_number(number,guild_id)
+        if not channel_id:
+            channel_id = confession["channel_id"]
+        if not message_id:
+            message_id = confession["message_id"]
+        return get_URL_from_ids(guild_id=guild_id,channel_id=channel_id,message_id=message_id)
+    except:
+        return None
+
+    
+async def get_message_from_URL(URL: str):
+    try:
+        path = PurePosixPath(
+            unquote(
+                urlparse(
+                    URL
+                ).path
+            )
+        ).parts
+        guild_id = int(path[2])
+        channel_id = int(path[3])
+        message_id = int(path[4])
+        guild = await bot.fetch_guild(guild_id)
+        channel = await guild.fetch_channel(channel_id)
+        message = await channel.fetch_message(message_id)
+        return message
+    except:
+        return None
+
+def get_confession_from_number(number: int, guild_id: int):
+    confessions = get_server_settings(guild_id)["message_log"]
+    confession = next((item for item in confessions if (int)(item['number']) == (int)(number)), None)
+    return confession
+
+def get_URL_from_ids(guild_id: int, channel_id: int, message_id: int):
+    return "https://discord.com/channels/" + (str)(guild_id) + "/" + (str)(channel_id) + "/" + (str)(message_id)
+
+@bot.command(pass_context=True,name='set-general-true')
+async def set_confess_in_general_true(ctx: discord.Interaction):
+    if not await is_moderator(guild=ctx.guild,user=ctx.message.author):
+        await ctx.channel.send("Only moderators are allowed to use this command")
+    else:
+        json_set_confess_in_general_true(ctx.guild.id)
+        await ctx.channel.send("members can now reply to any message")
+
+@bot.command(pass_context=True,name='set-general-false')
+async def set_confess_in_general_false(ctx: discord.Interaction):
+    if not await is_moderator(guild=ctx.guild,user=ctx.message.author):
+        await ctx.channel.send("Only moderators are allowed to use this command")
+    else:
+        json_set_confess_in_general_false(ctx.guild.id)
+        await ctx.channel.send("members can no longer reply to any message")
+
+@bot.command(pass_context=True,name='change-general')
+async def change_confess_in_general(ctx: discord.Interaction):
+    if not await is_moderator(guild=ctx.guild,user=ctx.message.author):
+        await ctx.channel.send("Only moderators are allowed to use this command")
+    else:
+        if get_confess_in_general(ctx.guild.id):
+            json_set_confess_in_general_false(ctx.guild.id)
+            await ctx.channel.send("members can no longer reply to any message")
+        else:
+            json_set_confess_in_general_false(ctx.guild.id)
+            await ctx.channel.send("members can no longer reply to any message")
+            
+
+def json_set_confess_in_general_true(guild_id: int):
+    server_settings = get_server_settings(guild_id)
+    server_settings["confess_in_general"] = True
+    write_server_settings(guild_id,server_settings)
+
+def json_set_confess_in_general_false(guild_id: int):
+    server_settings = get_server_settings(guild_id)
+    server_settings["confess_in_general"] = False
+    write_server_settings(guild_id,server_settings)
+
+def get_confess_in_general(guild_id: int):
+    server_settings = get_server_settings(guild_id)
+    return server_settings["confess_in_general"]
 
 @bot.tree.command(name='help')
 async def help(ctx: discord.Interaction):
@@ -320,6 +449,9 @@ async def help(ctx: discord.Interaction):
         embedVar.add_field(
             name="/set-moderator-role",
             value="If this is unset, only people with the Admin permission can use moderation features\n USAGE: /set-moderator-role <role-id>", inline=True)
+        embedVar.add_field(
+            name="/change-general",
+            value="Change whether or not users can reply with a confession to any message in the server (default is off)", inline=True)
     else:
         embedVar.add_field(
             name="/get-confession",
