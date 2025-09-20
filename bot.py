@@ -168,55 +168,6 @@ number: int):
         embedVar.set_image(url=confession["imgURL"])
     await ctx.response.send_message(embed=embedVar,ephemeral=True)
 
-@bot.command(pass_context=True,name='set-confession-channel')
-async def set_confession_channel(ctx: discord.Interaction):
-    if not await is_moderator(guild=ctx.guild,user=ctx.message.author):
-        await ctx.channel.send("Only moderators are allowed to use this command")
-    else:
-        channel_id = ctx.message.content.replace("/set-confession-channel ", "").replace(" ", "")
-        r = re.compile('<#.*>')
-        if r.match(channel_id) is None:
-            await ctx.channel.send("Your message needs to be formatted like /set-confession-channel #<channel>")
-        else:
-            channel_id = channel_id.replace("<#","").replace(">","")
-            try:
-                channel = await ctx.guild.fetch_channel(channel_id)
-                json_set_confession_channel(ctx.guild.id,channel_id)
-                await ctx.channel.send("the confession channel was set to " + channel.mention)
-            except:
-                await ctx.channel.send("the channel was not found (incorrect formatting?)")
-
-@bot.command(pass_context=True,name='set-log-channel')
-async def set_log_channel(ctx: discord.Interaction):
-    if not await is_moderator(guild=ctx.guild,user=ctx.message.author):
-        await ctx.channel.send("Only moderators are allowed to use this command")
-    else:
-        channel_id = ctx.message.content.replace("/set-log-channel ", "").replace(" ", "")
-        r = re.compile('<#.*>')
-        if r.match(channel_id) is None:
-            await ctx.channel.send("Your message needs to be formatted like /set-log-channel #<channel>")
-        else:
-            channel_id = channel_id.replace("<#","").replace(">","")
-            try:
-                channel = await ctx.guild.fetch_channel(channel_id)
-                json_set_log_channel(ctx.guild.id,channel_id)
-                await ctx.channel.send("the log channel was set to " + channel.mention)
-            except:
-                await ctx.channel.send("the channel was not found (incorrect formatting?)")
-
-@bot.command(pass_context=True,name='set-moderator-role')
-async def set_moderator_role(ctx: discord.Interaction):
-    if not await is_moderator(guild=ctx.guild,user=ctx.message.author):
-        await ctx.channel.send("Only moderators are allowed to use this command")
-    else:
-        role_id = ctx.message.content.replace("/set-moderator-role ", "").replace(" ", "")
-        try:
-            role = await ctx.guild.fetch_role(role_id)
-            json_set_moderator_role(ctx.guild.id,role_id)
-            await ctx.channel.send("the moderator role was set to " + role.mention)
-        except:
-            await ctx.channel.send("Your message needs to be formatted like /set-moderator-role <role-id>")
-
 async def is_moderator(guild: discord.Guild, user: discord.User):
     if is_admin(user):
         return True
@@ -438,20 +389,20 @@ async def help(ctx: discord.Interaction):
             name="/unban",
             value="Unban someone who was previously banned from confessing", inline=True)
         embedVar.add_field(
-            name="Bot Setup",
-            value="These settings should be set before the bot is used", inline=True)
-        embedVar.add_field(
-            name="/set-confession-channel",
-            value="Set the channel anonymous confessions get sent into (⚠️REQUIRED⚠️)", inline=True)
-        embedVar.add_field(
-            name="/set-log-channel",
-            value="Set the channel confession logs get sent into (this setting is optional and ⚠️SHOWS WHO WROTE CONFESSIONS⚠️)", inline=True)
-        embedVar.add_field(
-            name="/set-moderator-role",
-            value="If this is unset, only people with the Admin permission can use moderation features\n USAGE: /set-moderator-role <role-id>", inline=True)
-        embedVar.add_field(
-            name="/change-general",
-            value="Change whether or not users can reply with a confession to any message in the server (default is off)", inline=True)
+            name="/setup",
+            value="Set up the bot or change existing settings", inline=True)
+        # embedVar.add_field(
+        #     name="/set-confession-channel",
+        #     value="Set the channel anonymous confessions get sent into (⚠️REQUIRED⚠️)", inline=True)
+        # embedVar.add_field(
+        #     name="/set-log-channel",
+        #     value="Set the channel confession logs get sent into (this setting is optional and ⚠️SHOWS WHO WROTE CONFESSIONS⚠️)", inline=True)
+        # embedVar.add_field(
+        #     name="/set-moderator-role",
+        #     value="If this is unset, only people with the Admin permission can use moderation features\n USAGE: /set-moderator-role <role-id>", inline=True)
+        # embedVar.add_field(
+        #     name="/change-general",
+        #     value="Change whether or not users can reply with a confession to any message in the server (default is off)", inline=True)
     else:
         embedVar.add_field(
             name="/get-confession",
@@ -463,6 +414,91 @@ async def help(ctx: discord.Interaction):
 
 
     await ctx.response.send_message(embed=embedVar,ephemeral=True)
+
+
+# ------- deprecated commands --------
+
+bot.remove_command("help")
+@bot.command(pass_context=True,name='help')
+async def old_help_command(ctx: discord.Interaction):
+    await ctx.channel.send("Please use the proper /help command instead of writing it in chat")
+
+@bot.command(pass_context=True,name='set-confession-channel')
+async def set_confession_channel(ctx: discord.Interaction):
+    if not await is_moderator(guild=ctx.guild,user=ctx.message.author):
+        await ctx.channel.send("Only moderators are allowed to use this command")
+    else:
+        channel_id = ctx.message.content.replace("/set-confession-channel ", "").replace(" ", "")
+        r = re.compile('<#.*>')
+        if r.match(channel_id) is None:
+            await ctx.channel.send("Your message needs to be formatted like /set-confession-channel #<channel>")
+        else:
+            channel_id = channel_id.replace("<#","").replace(">","")
+            try:
+                channel = await ctx.guild.fetch_channel(channel_id)
+                json_set_confession_channel(ctx.guild.id,(int)(channel_id))
+                await ctx.channel.send("the confession channel was set to " + channel.mention)
+            except:
+                await ctx.channel.send("the channel was not found (incorrect formatting?)")
+
+@bot.command(pass_context=True,name='set-log-channel')
+async def set_log_channel(ctx: discord.Interaction):
+    if not await is_moderator(guild=ctx.guild,user=ctx.message.author):
+        await ctx.channel.send("Only moderators are allowed to use this command")
+    else:
+        channel_id = ctx.message.content.replace("/set-log-channel ", "").replace(" ", "")
+        r = re.compile('<#.*>')
+        if r.match(channel_id) is None:
+            await ctx.channel.send("Your message needs to be formatted like /set-log-channel #<channel>")
+        else:
+            channel_id = channel_id.replace("<#","").replace(">","")
+            try:
+                channel = await ctx.guild.fetch_channel(channel_id)
+                json_set_log_channel(ctx.guild.id,(int)(channel_id))
+                await ctx.channel.send("the log channel was set to " + channel.mention)
+            except:
+                await ctx.channel.send("the channel was not found (incorrect formatting?)")
+
+@bot.command(pass_context=True,name='set-moderator-role')
+async def set_moderator_role(ctx: discord.Interaction):
+    if not await is_moderator(guild=ctx.guild,user=ctx.message.author):
+        await ctx.channel.send("Only moderators are allowed to use this command")
+    else:
+        role_id = ctx.message.content.replace("/set-moderator-role ", "").replace(" ", "")
+        try:
+            role = await ctx.guild.fetch_role(role_id)
+            json_set_moderator_role(ctx.guild.id,(int)(role_id))
+            await ctx.channel.send("the moderator role was set to " + role.mention)
+        except:
+            await ctx.channel.send("Your message needs to be formatted like /set-moderator-role <role-id>")
+
+@bot.command(pass_context=True,name='set-general-true')
+async def set_confess_in_general_true(ctx: discord.Interaction):
+    if not await is_moderator(guild=ctx.guild,user=ctx.message.author):
+        await ctx.channel.send("Only moderators are allowed to use this command")
+    else:
+        json_set_confess_in_general(ctx.guild.id, True)
+        await ctx.channel.send("members can now reply to any message")
+
+@bot.command(pass_context=True,name='set-general-false')
+async def set_confess_in_general_false(ctx: discord.Interaction):
+    if not await is_moderator(guild=ctx.guild,user=ctx.message.author):
+        await ctx.channel.send("Only moderators are allowed to use this command")
+    else:
+        json_set_confess_in_general(ctx.guild.id, False)
+        await ctx.channel.send("members can no longer reply to any message")
+
+@bot.command(pass_context=True,name='change-general')
+async def change_confess_in_general(ctx: discord.Interaction):
+    if not await is_moderator(guild=ctx.guild,user=ctx.message.author):
+        await ctx.channel.send("Only moderators are allowed to use this command")
+    else:
+        if get_confess_in_general(ctx.guild.id):
+            json_set_confess_in_general(ctx.guild.id, False)
+            await ctx.channel.send("members can no longer reply to any message")
+        else:
+            json_set_confess_in_general(ctx.guild.id, True)
+            await ctx.channel.send("members can no longer reply to any message")
 
 
 
