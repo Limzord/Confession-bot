@@ -67,7 +67,10 @@ image: discord.Attachment=None):
         return
     channel = await get_confession_channel(ctx.guild)
     if channel == 0:
-        await ctx.response.send_message(content="The mods forgot to set a confession channel. Please annoy them about this :3",ephemeral=True)
+        if not await is_moderator(guild=ctx.guild,user=ctx.user):
+            await ctx.response.send_message(content="The mods forgot to set a confession channel. Please annoy them about this :3",ephemeral=True)
+            return
+        await bot_setup(ctx)
         return
     sidebarColor= discord.Color.from_rgb(randrange(255), randrange(255), randrange(255))
     confession_number = get_server_settings(ctx.guild.id)["confession_amount"] + 1
