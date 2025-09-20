@@ -322,48 +322,232 @@ def get_confession_from_number(number: int, guild_id: int):
 def get_URL_from_ids(guild_id: int, channel_id: int, message_id: int):
     return "https://discord.com/channels/" + (str)(guild_id) + "/" + (str)(channel_id) + "/" + (str)(message_id)
 
-@bot.command(pass_context=True,name='set-general-true')
-async def set_confess_in_general_true(ctx: discord.Interaction):
-    if not await is_moderator(guild=ctx.guild,user=ctx.message.author):
-        await ctx.channel.send("Only moderators are allowed to use this command")
-    else:
-        json_set_confess_in_general_true(ctx.guild.id)
-        await ctx.channel.send("members can now reply to any message")
+async def bot_setup(ctx: discord.Interaction):
+    if await is_moderator(ctx.guild,ctx.user):
+        server_settings = get_server_settings(ctx.guild_id)
 
-@bot.command(pass_context=True,name='set-general-false')
-async def set_confess_in_general_false(ctx: discord.Interaction):
-    if not await is_moderator(guild=ctx.guild,user=ctx.message.author):
-        await ctx.channel.send("Only moderators are allowed to use this command")
-    else:
-        json_set_confess_in_general_false(ctx.guild.id)
-        await ctx.channel.send("members can no longer reply to any message")
+        # Step 0: Introduce the concept of this menu
+        view0 = StartupView()
+        await ctx.response.send_message(
+            "⚙️ Welcome to the setup process!\n\n"
+            "Here you can select channels, roles, and settings\n"
+            "For each option, click **Skip** to leave the option unchanged\n"
+            "or select the value you would like and click **Confirm** to change the setting\n\n"
+            "Press **Continue** to continue or **Cancel** to abort.",
+            view=view0,
+            ephemeral=True
+        )
+        await view0.wait()
+        if view0.confirmed is False:
+            await ctx.edit_original_response(
+                content="❌ Setup has been cancelled",
+                view=None
+            )
+            return
 
-@bot.command(pass_context=True,name='change-general')
-async def change_confess_in_general(ctx: discord.Interaction):
-    if not await is_moderator(guild=ctx.guild,user=ctx.message.author):
-        await ctx.channel.send("Only moderators are allowed to use this command")
-    else:
-        if get_confess_in_general(ctx.guild.id):
-            json_set_confess_in_general_false(ctx.guild.id)
-            await ctx.channel.send("members can no longer reply to any message")
-        else:
-            json_set_confess_in_general_false(ctx.guild.id)
-            await ctx.channel.send("members can no longer reply to any message")
-            
+        # Step 1: Confession channel
+        view1 = SetupView(ChannelDropdown(ctx.guild, "Confession Channel", server_settings["confession_channel"]))
+        await ctx.edit_original_response(content="Set the channel anonymous confessions get sent into **⚠️REQUIRED⚠️**", view=view1)
+        await view1.wait()
+        new_confession_channel = view1.value
 
-def json_set_confess_in_general_true(guild_id: int):
-    server_settings = get_server_settings(guild_id)
-    server_settings["confess_in_general"] = True
-    write_server_settings(guild_id,server_settings)
+        # Step 2: Log channel
+        view2 = SetupView(ChannelDropdown(ctx.guild, "Log Channel", server_settings["log_channel"]))
+        await ctx.edit_original_response(content="Set the channel confession logs get sent into\n(this setting is optional and **⚠️SHOWS WHO WROTE CONFESSIONS⚠️**)", view=view2)
+        await view2.wait()
+        new_log_channel = view2.value
 
-def json_set_confess_in_general_false(guild_id: int):
-    server_settings = get_server_settings(guild_id)
-    server_settings["confess_in_general"] = False
-    write_server_settings(guild_id,server_settings)
+        # Step 3: Moderator role
+        view3 = SetupView(RoleDropdown(ctx.guild, server_settings["moderator_role"]))
+        await ctx.edit_original_response(content="Set the role which can use moderation features\n(change these settings, ban and unban people, see who wrote confessions)\nIf this is unset, only people with the Admin permission can use moderation features", view=view3)
+        await view3.wait()
+        new_moderator_role = view3.value
 
-def get_confess_in_general(guild_id: int):
-    server_settings = get_server_settings(guild_id)
-    return server_settings["confess_in_general"]
+        # Step 4: General reply toggle
+        view4 = SetupView(BoolSelect(server_settings["confess_in_general"]))
+        await ctx.edit_original_response(content="Select whether or not users can reply with a confession to any message in the server\n(may cause chaos :3)", view=view4)
+        await view4.wait()
+        new_confess_in_general = view4.value
+
+        # Final summary
+        await ctx.edit_original_response(
+            content=(
+                "✅ Setup complete!\n\n"
+                f"Confession Channel: {format_channel(new_confession_channel, server_settings["confession_channel"])}\n"
+                f"Log Channel: {format_channel(new_log_channel, server_settings["log_channel"])}\n"
+                f"Moderator Role: {format_role(new_moderator_role, server_settings["moderator_role"])}\n"
+                f"Confession replies in all Channels: {format_bool(new_confess_in_general, server_settings["confess_in_general"])}"
+            ),
+            view=None,
+        )
+
+        # Here you would save to a database or config file
+        if new_confession_channel is not None:
+            json_set_confession_channel(ctx.guild.id, new_confession_channel)
+        if new_log_channel is not None:
+            json_set_log_channel(ctx.guild.id, new_log_channel)
+        if new_moderator_role is not None:
+            json_set_moderator_role(ctx.guild.id, new_moderator_role)
+        if new_confess_in_general is not None:
+            json_set_confess_in_general(ctx.guild.id, new_confess_in_general)
+        return
+    await ctx.response.send_message(content="Only moderators are allowed to change the bot settings",ephemeral=True)
+
+def format_channel(value: int | None, previous_channel: int) -> str:
+    if value is None:
+        output = f"<#{previous_channel}>"
+        return "Unchanged (" + output + ")"
+    if value == 0:
+        return "Unset"
+    return f"<#{value}>"
+
+
+def format_role(value: int | None, previous_role: int) -> str:
+    if value is None:
+        output = f"<@&{previous_role}>"
+        return "Unchanged (" + output + ")"
+    if value == 0:
+        return "Unset"
+    return f"<@&{value}>"
+
+
+def format_bool(value: bool | None, previous_setting: bool) -> str:
+    if value is None:
+        output = "✅ Enabled" if previous_setting else "❌ Disabled"
+        return "Unchanged (" + output + ")"
+    return "✅ Enabled" if value else "❌ Disabled"
+
+@bot.tree.command(name='setup')
+async def bot_setup_command(ctx: discord.Interaction):
+    """set up the bot settings"""
+    await bot_setup(ctx)
+
+def to_int_id(string):
+    """Normalize saved values: accept int, numeric str, or discord objects with .id"""
+    if string is None:
+        return None
+    if isinstance(string, int):
+        return string
+    if isinstance(string, str) and string.isdigit():
+        return int(string)
+    if hasattr(string, "id"):
+        try:
+            return int(string.id)
+        except Exception:
+            return None
+    return None
+
+def sort_channels(channels):
+    # For channels inside categories, sort by (category_position, channel.position)
+    # For channels without category, use category_position = -1
+    def channel_key(c):
+        cat_pos = c.category.position if c.category else -1
+        return (cat_pos, c.position)
+    return sorted(channels, key=channel_key)
+
+# ---------- Reusable Dropdowns ----------
+
+class ChannelDropdown(discord.ui.Select):
+    def __init__(self, guild: discord.Guild, label: str, preselected = None):
+        preselected_id = to_int_id(preselected)
+        channels_sorted = sort_channels(guild.text_channels)
+        options = [
+            discord.SelectOption(label="None", value="0", default=(preselected_id == 0))
+        ] + [
+            discord.SelectOption(
+                label=f"#{channel.name}",
+                value=str(channel.id),
+                default=(channel.id == preselected_id),
+            )
+            for channel in channels_sorted
+        ]
+        super().__init__(placeholder=f"Select {label}...", min_values=1, max_values=1, options=options)
+        self.chosen = preselected_id
+
+    async def callback(self, ctx: discord.Interaction):
+        self.chosen = int(self.values[0])
+        await ctx.response.defer()
+
+
+class RoleDropdown(discord.ui.Select):
+    def __init__(self, guild: discord.Guild, preselected: int | None = None):
+        preselected_id = to_int_id(preselected)
+        roles_sorted = [r for r in guild.roles if not r.is_default()]
+        roles_sorted.reverse()
+        options = [
+            discord.SelectOption(label="None", value="0", default=(preselected_id == 0))
+        ] + [
+            discord.SelectOption(
+                label=role.name,
+                value=str(role.id),
+                default=(role.id == preselected_id),
+            )
+            for role in roles_sorted
+        ]
+        super().__init__(placeholder="Select Manager Role...", min_values=1, max_values=1, options=options)
+        self.chosen = preselected_id
+
+    async def callback(self, ctx: discord.Interaction):
+        self.chosen = int(self.values[0])
+        await ctx.response.defer()
+
+
+class BoolSelect(discord.ui.Select):
+    def __init__(self, preselected: bool | None = None):
+        options = [
+            discord.SelectOption(label="Enabled", value="true", default=(preselected is True)),
+            discord.SelectOption(label="Disabled", value="false", default=(preselected is False)),
+        ]
+        super().__init__(placeholder="Feature state...", min_values=1, max_values=1, options=options)
+        # store boolean (or None if skipped)
+        self.chosen: bool | None = preselected
+
+    async def callback(self, interaction: discord.Interaction):
+        self.chosen = (self.values[0] == "true")
+        await interaction.response.defer()
+
+
+# ---------- Reusable View with Skip/Confirm ----------
+
+class SetupView(discord.ui.View):
+    def __init__(self, dropdown: discord.ui.Select):
+        super().__init__(timeout=60)
+        self.dropdown = dropdown
+        self.add_item(dropdown)
+        self.value = None
+
+    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.green, row = 1)
+    async def confirm(self, ctx: discord.Interaction, button: discord.ui.Button):
+        self.value = self.dropdown.chosen
+        self.stop()
+        await ctx.response.defer()
+
+    @discord.ui.button(label="Skip", style=discord.ButtonStyle.gray, row = 1)
+    async def skip(self, ctx: discord.Interaction, button: discord.ui.Button):
+        self.value = None
+        self.stop()
+        await ctx.response.defer()
+
+# ---------- View for Startup ----------
+
+class StartupView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=60)
+        self.confirmed = None
+
+    @discord.ui.button(label="Continue", style=discord.ButtonStyle.green)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.confirmed = True
+        self.stop()
+        await interaction.response.defer()
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.red)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.confirmed = False
+        self.stop()
+        await interaction.response.defer()
+
+
 
 @bot.tree.command(name='help')
 async def help(ctx: discord.Interaction):
