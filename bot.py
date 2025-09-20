@@ -205,6 +205,10 @@ async def get_log_channel(guild: discord.Guild):
     except:
         return 0
 
+def get_confess_in_general(guild_id: int):
+    server_settings = get_server_settings(guild_id)
+    return server_settings["confess_in_general"]
+
 def get_server_settings(guild_id: int):
     if Path((str)(guild_id) + '.json').exists():
         with open((str)(guild_id) + '.json', 'r') as file:
@@ -236,6 +240,11 @@ def json_set_log_channel(guild_id: int,channel_id: int):
 def json_set_moderator_role(guild_id: int,role_id: int):
     server_settings = get_server_settings(guild_id)
     server_settings["moderator_role"] = role_id
+    write_server_settings(guild_id,server_settings)
+
+def json_set_confess_in_general(guild_id: int, setting: bool):
+    server_settings = get_server_settings(guild_id)
+    server_settings["confess_in_general"] = setting
     write_server_settings(guild_id,server_settings)
 
 @bot.tree.command(name='ban')
