@@ -358,19 +358,19 @@ async def bot_setup(ctx: discord.Interaction):
             return
 
         # Step 1: Confession channel
-        view1 = SetupView(ChannelDropdown(ctx.guild, "Confession Channel", server_settings["confession_channel"]))
+        view1 = PaginatedSelector(guild=ctx.guild, label="Confession Channel", preselected=server_settings["confession_channel"], mode="channel")
         await ctx.edit_original_response(content="Set the channel anonymous confessions get sent into **⚠️REQUIRED⚠️**", view=view1)
         await view1.wait()
         new_confession_channel = view1.value
 
         # Step 2: Log channel
-        view2 = SetupView(ChannelDropdown(ctx.guild, "Log Channel", server_settings["log_channel"]))
+        view2 = PaginatedSelector(guild=ctx.guild, label="Log Channel", preselected=server_settings["log_channel"], mode="channel")
         await ctx.edit_original_response(content="Set the channel confession logs get sent into\n(this setting is optional and **⚠️SHOWS WHO WROTE CONFESSIONS⚠️**)", view=view2)
         await view2.wait()
         new_log_channel = view2.value
 
         # Step 3: Moderator role
-        view3 = SetupView(RoleDropdown(ctx.guild, server_settings["moderator_role"]))
+        view3 = PaginatedSelector(guild=ctx.guild, label="Moderator Role", preselected=server_settings["moderator_role"], mode="role")
         await ctx.edit_original_response(content="Set the role which can use moderation features\n(change these settings, ban and unban people, see who wrote confessions)\nIf this is unset, only people with the Admin permission can use moderation features", view=view3)
         await view3.wait()
         new_moderator_role = view3.value
@@ -457,52 +457,149 @@ def sort_channels(channels):
         return (cat_pos, c.position)
     return sorted(channels, key=channel_key)
 
-# ---------- Reusable Dropdowns ----------
+def sort_roles(roles):
+    sorted_roles = [r for r in roles if not r.is_default()]
+    sorted_roles.reverse()
+    return sorted_roles
 
-class ChannelDropdown(discord.ui.Select):
-    def __init__(self, guild: discord.Guild, label: str, preselected = None):
+# ------ alternate paginated selector -------
+page_size = 24  # 24 items + 1 "None" option
+
+class PaginatedSelector(discord.ui.View):
+    def __init__(self, guild: discord.Guild, preselected: int | None = None,
+                 mode: str = "channel", label: str = "Select"):
         preselected_id = to_int_id(preselected)
-        channels_sorted = sort_channels(guild.text_channels)
-        options = [
-            discord.SelectOption(label="None", value="0", default=(preselected_id == 0))
-        ] + [
-            discord.SelectOption(
-                label=f"#{channel.name}",
-                value=str(channel.id),
-                default=(channel.id == preselected_id),
-            )
-            for channel in channels_sorted
-        ]
-        super().__init__(placeholder=f"Select {label}...", min_values=1, max_values=1, options=options)
-        self.chosen = preselected_id
+        super().__init__(timeout=120)
 
-    async def callback(self, ctx: discord.Interaction):
-        self.chosen = int(self.values[0])
-        await ctx.response.defer()
+        self.guild = guild
+        self.mode = mode
+        self.label = label
+        self.preselected = preselected_id
+        self.value: int | None = preselected_id
+        self.current_page = 0
 
+        # prepare items list
+        if self.mode == "channel":
+            self.items = sort_channels(list(guild.text_channels))
+        else:
+            self.items = sort_roles(list(guild.roles))
 
-class RoleDropdown(discord.ui.Select):
-    def __init__(self, guild: discord.Guild, preselected: int | None = None):
-        preselected_id = to_int_id(preselected)
-        roles_sorted = [r for r in guild.roles if not r.is_default()]
-        roles_sorted.reverse()
-        options = [
-            discord.SelectOption(label="None", value="0", default=(preselected_id == 0))
-        ] + [
-            discord.SelectOption(
-                label=role.name,
-                value=str(role.id),
-                default=(role.id == preselected_id),
-            )
-            for role in roles_sorted
-        ]
-        super().__init__(placeholder="Select Manager Role...", min_values=1, max_values=1, options=options)
-        self.chosen = preselected_id
+        if self.preselected is not None and self.preselected != 0:
+            found_idx = None
+            for idx, item in enumerate(self.items):
+                if item.id == self.preselected:
+                    found_idx = idx
+                    break
+            if found_idx is not None:
+                self.current_page = found_idx // page_size
+            else:
+                self.preselected = None
+                self.value = None
 
-    async def callback(self, ctx: discord.Interaction):
-        self.chosen = int(self.values[0])
-        await ctx.response.defer()
+        self._clamp_current_page()
 
+        self.dropdown = self._get_dropdown()
+        self.add_item(self.dropdown)
+
+        if self._max_page() > 0:
+            self.prev_btn = discord.ui.Button(label="Previous", style=discord.ButtonStyle.gray, row=1)
+            self.next_btn = discord.ui.Button(label="Next", style=discord.ButtonStyle.gray, row=1)
+            self.prev_btn.callback = self.previous
+            self.next_btn.callback = self.next
+            self.add_item(self.prev_btn)
+            self.add_item(self.next_btn)
+            self._update_buttons()
+
+        self.confirm_btn = discord.ui.Button(label="Confirm", style=discord.ButtonStyle.green, row=2)
+        self.skip_btn = discord.ui.Button(label="Skip", style=discord.ButtonStyle.gray, row=2)
+        self.confirm_btn.callback = self.confirm
+        self.skip_btn.callback = self.skip
+        self.add_item(self.confirm_btn)
+        self.add_item(self.skip_btn)
+
+    def _max_page(self) -> int:
+        if not self.items:
+            return 0
+        return max(0, (len(self.items) - 1) // page_size)
+
+    def _clamp_current_page(self):
+        max_p = self._max_page()
+        if self.current_page < 0:
+            self.current_page = 0
+        if self.current_page > max_p:
+            self.current_page = max_p
+
+    def _get_dropdown(self) -> discord.ui.Select:
+        page_items = self.items[self.current_page * page_size:(self.current_page + 1) * page_size]
+
+        options = [discord.SelectOption(label="None", value="0", default=(self.preselected == 0))]
+
+        for item in page_items:
+            label = f"#{item.name}" if self.mode == "channel" else item.name
+            options.append(discord.SelectOption(label=label, value=str(item.id),
+                                                default=(item.id == self.preselected)))
+
+        select = discord.ui.Select(placeholder=self.label, min_values=1, max_values=1,
+                                   options=options, row=0)
+        select.callback = self.select_callback
+        return select
+
+    async def select_callback(self, interaction: discord.Interaction):
+        try:
+            self.value = int(self.dropdown.values[0])
+        except Exception:
+            pass
+        await interaction.response.defer()
+
+    async def previous(self, interaction: discord.Interaction):
+        if self.current_page > 0:
+            self.current_page -= 1
+            await self._rebuild_view_and_edit(interaction)
+
+    async def next(self, interaction: discord.Interaction):
+        if self.current_page < self._max_page():
+            self.current_page += 1
+            await self._rebuild_view_and_edit(interaction)
+
+    async def _rebuild_view_and_edit(self, interaction: discord.Interaction):
+        self._clamp_current_page()
+
+        self.clear_items()
+
+        self.dropdown = self._get_dropdown()
+        self.add_item(self.dropdown)
+
+        if self._max_page() > 0 and hasattr(self, "prev_btn") and hasattr(self, "next_btn"):
+            self.add_item(self.prev_btn)
+            self.add_item(self.next_btn)
+            self._update_buttons()
+
+        self.add_item(self.confirm_btn)
+        self.add_item(self.skip_btn)
+
+        await interaction.response.edit_message(view=self)
+
+    async def confirm(self, interaction: discord.Interaction):
+        try:
+            if getattr(self.dropdown, "values", None):
+                self.value = int(self.dropdown.values[0])
+            else:
+                self.value = self.preselected
+        except Exception:
+            pass
+
+        self.stop()
+        await interaction.response.defer()
+
+    async def skip(self, interaction: discord.Interaction):
+        self.value = None
+        self.stop()
+        await interaction.response.defer()
+
+    def _update_buttons(self):
+        if hasattr(self, "prev_btn") and hasattr(self, "next_btn"):
+            self.prev_btn.disabled = (self.current_page == 0)
+            self.next_btn.disabled = (self.current_page >= self._max_page())
 
 class BoolSelect(discord.ui.Select):
     def __init__(self, preselected: bool | None = None):
