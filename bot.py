@@ -40,11 +40,21 @@ async def on_ready():
     print('------')
 
 @bot.event
-async def on_guild_join():
-    for server in bot.guilds:
-        bot.tree.copy_global_to(guild=server)
-        await bot.tree.sync(guild=server)
-    print("added slash commands to new server\n server list:\n" + bot.guilds)
+async def on_guild_join(guild):
+    for channel in guild.channels:
+        if channel.type == discord.ChannelType.text:
+            if channel.permissions_for(guild.me).send_messages:
+                embedVar = discord.Embed(
+                    title="Hello! 💗",
+                    description="I am in your server now >:)"
+                        )
+                embedVar.add_field(
+                    name="use /help for more info or /setup to set up the bot", value="", inline=True)
+                await channel.send(embed=embedVar)
+                break
+    bot.tree.copy_global_to(guild=guild)
+    await bot.tree.sync(guild=guild)
+    print("added slash commands to new server: " + (str)(guild.name))
 
 @bot.tree.command(name='akb')
 async def akb(ctx: discord.Interaction):
