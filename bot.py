@@ -115,7 +115,7 @@ image: discord.Attachment=None):
                 await ctx.response.send_message(content="You can only reply to messages in the confession channel😣",ephemeral=True)
                 return
             bot_message = await reply_message.channel.send(embed=embedVar, reference=reply_message, mention_author=ping_reply)
-            await send_message_to_log(ctx,message,confession_number,bot_message.id,channel.id,reply_messageURL,imgURL)
+            await send_message_to_log(ctx,message,confession_number,bot_message.id,reply_message.channel.id,reply_messageURL,imgURL)
         else:
             await ctx.response.send_message(content="The message URL you provided is from a different server😣",ephemeral=True)
             return
