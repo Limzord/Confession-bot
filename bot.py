@@ -139,7 +139,10 @@ async def send_message_to_log(ctx: discord.Interaction, message: str, confession
         embedVar.set_image(url=imgURL)
     channel = await get_log_channel(ctx.guild)
     if not channel == 0:
-        await channel.send(embed=embedVar)
+        try:
+            await channel.send(embed=embedVar)
+        except:
+            print("couldn't send message to log")
     add_message_to_log(confession_number,user.id,message, ctx.guild.id, message_id, channel_id, reply_messageURL, imgURL)
 
 def add_message_to_log(number: int, user_id: int, message: str, guild_id: int, message_id: int, channel_id: int, reply_messageURL: str, imgURL: str):
