@@ -716,6 +716,10 @@ async def help(ctx: discord.Interaction):
     embedVar.add_field(
         name="Disclaimer:",
         value="All moderators can see who wrote anonymous confessions", inline=True)
+    embedVar.add_field(
+        name="Source Code:",
+      value="https://git.tmmd.club/Limzord/Confession-Bot", inline=True"
+    )
     embedVar.set_author(name="This bot was created by Alissa(@Limzord)",url="https://limzord.gay",icon_url="https://limzord.gay/pfp.png")
 
 
